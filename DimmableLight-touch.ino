@@ -57,7 +57,8 @@
 #define LED_PIN2 5
 #define FADE_DELAY 10  // Delay in ms for each percentage fade up/down (10ms = 1s full-range dim)
 
-static int16_t currentLevel = 0;  // Current dim level...
+static int16_t currentLevel1 = 0;  // Current dim level...
+static int16_t currentLevel2 = 0;  // Current dim level...
 
 int16_t LastLightState=LIGHT_OFF;
 int16_t LastDimValue=50;
@@ -142,12 +143,10 @@ void loop()
   }
   
   if (currtouched & dimmerTouchMask) {
-    Serial.println(DimmerDir);
     if (timeDiff > SHORTPRESS) {
       if (LastLightState == LIGHT_OFF) {
         LastLightState = LIGHT_ON;
       }
-      Serial.print("Dimmer ");
       if (DimmerDir) {
         Serial.println("UP");
         LastDimValue+=2;
@@ -177,8 +176,10 @@ void loop()
       }
     }
   }
-  Serial.print("Touched : ");
-  Serial.println(currtouched);
+  if (currtouched != lasttouched) {
+    Serial.print("Touched : ");
+    Serial.println(currtouched);
+  }
 
   lasttouched = currtouched; 
 }
@@ -243,10 +244,10 @@ void SetCurrentState2Hardware()
 {
 	if (LastLightState==LIGHT_OFF) {
 		Serial.println( "Light state: OFF" );
-    fadeToLevel(0);
+    fadeToLevel(0,0);
 	} else {
 		Serial.print( "Light state: ON, Level: " );
-    fadeToLevel(LastDimValue);
+    fadeToLevel(LastDimValue, LastDimValue);
 		Serial.println( LastDimValue );
 	}
 
@@ -266,15 +267,18 @@ void SendCurrentState2Controller()
 /***
  *  This method provides a graceful fade up/down effect
  */
-void fadeToLevel( int toLevel )
+void fadeToLevel( int toLevel1, int toLevel2 )
 {
 
-  int delta = ( toLevel - currentLevel ) < 0 ? -1 : 1;
+  int delta1 = ( toLevel1 - currentLevel1 ) < 0 ? -1 : 1;
+  int delta2 = ( toLevel2 - currentLevel2 ) < 0 ? -1 : 1;
+  
 
-  while ( currentLevel != toLevel ) {
-    currentLevel += delta;
-    analogWrite( LED_PIN1, (int)(currentLevel / 100. * 255) );
-    analogWrite( LED_PIN2, (int)(currentLevel / 100. * 255) );
+  while ( currentLevel1 != toLevel2 | currentLevel2 != toLevel2) {
+    if (currentLevel1 != toLevel1) currentLevel1 += delta1;
+    if (currentLevel2 != toLevel2) currentLevel2 += delta2;
+    analogWrite( LED_PIN1, (int)(currentLevel1 / 100. * 255) );
+    analogWrite( LED_PIN2, (int)(currentLevel2 / 100. * 255) );
     wait( FADE_DELAY );
   }
 }
