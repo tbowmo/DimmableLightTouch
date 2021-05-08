@@ -17,16 +17,14 @@
  * version 2 as published by the Free Software Foundation.
  *
  *******************************
- *
- * REVISION HISTORY
- * Version 1.0 - January 30, 2015 - Developed by GizMoCuz (Domoticz)
- *
- * DESCRIPTION
- * This sketch provides an example how to implement a Dimmable Light
- * It is pure virtual and it logs messages to the serial output
- * It can be used as a base sketch for actual hardware.
- * Stores the last light state and level in eeprom.
- *
+ * Based on work by GizMoCuz (Domoticz). 
+ * 
+ * Converted to platform-io, and cpp. 
+ * Heavily refactored for non-blocking use, that is main loop runs without using any
+ * delays, as everything is using millis() and offsets for delays.
+ * 
+ * Uses a MPR121 for touch interface, and sets an analog out (PWM) that controls a LED strip
+ * current implementation does not distinguish on the different touch buttons
  */
 #include <Arduino.h>
 // Enable debug prints
@@ -50,7 +48,7 @@
 #define LIGHT_ON true
 
 #define SN "Dimable Light-touch"
-#define SV "1.1"
+#define SV "2.0"
 
 #define LED_PIN1 6
 
@@ -208,7 +206,7 @@ void loop()
       else if (touchDuration < TOUCH_TIME_DIMMING && touchDuration > TOUCH_TIME_TOGGLE_POWER) {
         handlePowerToggle();
       }
-      nextDimming = millis() + 100;
+      nextDimming = millis() + 50;
     }
   }
   
@@ -222,7 +220,9 @@ void loop()
     lastTouch = currentTouch;
   }
   fadeToDesiredLevel();
-  SendCurrentState2Controller();
+  if (noTouchDuration > TOUCH_TIME_BETWEEN_ACTIONS) {
+    SendCurrentState2Controller();
+  }
 }
 
 /**
@@ -246,10 +246,10 @@ void handleDimming() {
   // Dimming
   if (dimmerDirection == UP) {
     Serial.println("UP");
-    desiredLevel+=2;
+    desiredLevel+=1;
   } else {
     Serial.println("DOWN");
-    desiredLevel-=2;
+    desiredLevel-=1;
   }
 
   // Change dimming direction
