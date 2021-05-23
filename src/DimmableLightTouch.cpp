@@ -42,8 +42,8 @@
 
 #define CHILD_ID_LIGHT 1
 
-#define EPROM_LIGHT_STATE 1
-#define EPROM_DIMMER_LEVEL 2
+const uint8_t EPROM_LIGHT_1 = 0;
+const uint8_t EPROM_LIGHT_2 = 1;
 
 #define SN "Dimable Light-touch"
 #define SV "2.0"
@@ -51,7 +51,30 @@
 Adafruit_MPR121 cap = Adafruit_MPR121();
 
 MyMessage dimmerMsg(CHILD_ID_LIGHT, V_DIMMER);
-void sendCurrentState2Controller(uint16_t desiredLevel, bool onOff);
+void sendCurrentState2Controller(int16_t desiredLevel, bool onOff);
+
+int16_t readFromEeprom() {
+  uint8_t byte1 = loadState(EPROM_LIGHT_1);
+  uint8_t byte2 = loadState(EPROM_LIGHT_2);
+  int16_t storedValue = byte1 * 0xff + byte2;
+  Serial.print("reading from eeprom: ");
+  Serial.println(storedValue); 
+  return storedValue;
+}
+
+void saveToEeprom(int16_t value) {
+  int16_t oldValue = readFromEeprom();
+  // Only save, if the difference is larger than 5
+  // this is to save a bit on eeprom writes.
+  if (oldValue != value) {
+    Serial.print("saving to eeprom: ");
+    Serial.println(value);
+    uint8_t byte1 = value / 0xff;
+    uint8_t byte2 = value % 0xff;
+    saveState(EPROM_LIGHT_1, byte1);
+    saveState(EPROM_LIGHT_2, byte2);
+  }
+}
 
 void setup()
 {
@@ -61,9 +84,7 @@ void setup()
 
   pinMode(LED_PIN, OUTPUT);
   analogWrite(LED_PIN, 0);
-  //Retreive our last light state from the eprom
-  controllerValue(50);
- 
+
 	Serial.println("Node ready to receive messages...");
 
   if (!cap.begin()) {
@@ -71,8 +92,8 @@ void setup()
     while(1);  
   }
   Serial.println("MPR121 found, continuing");
-  cap.setThresholds(12,6);
-  InitSM(sendCurrentState2Controller);
+  int16_t storedValue = readFromEeprom();
+  InitSM(sendCurrentState2Controller, storedValue);
 }
 
 void presentation()
@@ -96,22 +117,14 @@ void receive(const MyMessage &message)
       //it will do so at 50%
       Serial.println("V_LIGHT command received...");
   
-      int lstate= atoi( message.data );
-      if ((lstate<0)||(lstate>1)) {
-        Serial.println("V_LIGHT data invalid (should be 0/1)");
-        return;
-      }
-      controllerOnOff(lstate == 1);
+      int lstate= constrain(atoi( message.data ), 0, 1);
+      controllerOnOff(lstate);
       break;
     }
     case V_PERCENTAGE: {
       Serial.println("V_DIMMER command received...");
       int16_t dimvalue= atoi( message.data );
-      if (dimvalue==0) {
-        controllerOnOff(false);
-      } else {
-        controllerValue(dimvalue);
-      }
+      controllerValue(dimvalue);
       break;
     }
     default:
@@ -123,7 +136,7 @@ void receive(const MyMessage &message)
 /***
  * Send desired level to mysensors controller, if changed from last time it was sent
  */
-void sendCurrentState2Controller(uint16_t transmitLevel, bool onOff)
+void sendCurrentState2Controller(int16_t transmitLevel, bool onOff)
 {
   static int16_t lastTransmittedLevel;
   int16_t level = transmitLevel;
@@ -133,6 +146,7 @@ void sendCurrentState2Controller(uint16_t transmitLevel, bool onOff)
   
   if (lastTransmittedLevel != level) {
     send(dimmerMsg.set((int16_t)level));
+    saveToEeprom(level);
     lastTransmittedLevel = level;
   }
 }

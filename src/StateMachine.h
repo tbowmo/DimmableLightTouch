@@ -8,7 +8,7 @@ struct StateDefinition {
   const char* name;
 };
 
-void InitSM(void(*alarmCallback)(uint16_t, bool));
+void InitSM(void(*alarmCallback)(int16_t, bool), int16_t initialLightLevel);
 void UpdateSM();  // Update the state machine (transition once, then update) etc.
 
 void touch(bool);

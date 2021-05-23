@@ -17,7 +17,7 @@ static bool dimmerUp;
  * Internal method declarations
  */
 bool setNewLevel(int16_t newValue);
-void (*_sendStateCallback)(uint16_t, bool);
+void (*_sendStateCallback)(int16_t, bool);
 
 bool CurrentStateIs(StateDefinition& state) {
   return _dimmerSM.currentState ==  &state;
@@ -58,7 +58,7 @@ void StateIdleTransition();
 /**********************************/
 static StateDefinition sdTouchBegin      = { StateTouchBeginTransition, StateTouchBegin, "Touch start"};
 static StateDefinition sdTouchEnd        = { StateTouchEndTransition, NULL, "Touch end"};
-static StateDefinition sdDimmer          = { NULL, StateTouchDimmer, "Dimmer up"};
+static StateDefinition sdDimmer          = { NULL, StateTouchDimmer, "Dimmer"};
 static StateDefinition sdControllerValue = { NULL, StateControllerValue, "Controller value"};
 static StateDefinition sdIdle            = { StateIdleTransition, NULL, "Idle"};
 /**********************************/
@@ -109,7 +109,7 @@ void StateControllerValue() {
       char direction = (currentLightLevel < level) ? + 1 : -1;
       setNewLevel(currentLightLevel + direction);
     }
-  } else {
+  } else { // if we reached correct light level, then jump to idle mode.
     SwitchSM(sdIdle);
   }
 }
@@ -123,24 +123,14 @@ void StateIdleTransition() {
 
 /**
  * Set new value, with max / min checks
+ * returns true if newValue is within allowed range
  */
 bool setNewLevel(int16_t newValue) {
-  bool success = false;
-  if (newValue >= 0 && newValue <= DIMMING_MAX_LEVEL) {
-    currentLightLevel = newValue;
-    success = true;
-  }
-
-  if (newValue < 0) {
-    currentLightLevel = 0;
-  }
-  if (newValue > DIMMING_MAX_LEVEL) {
-    currentLightLevel = DIMMING_MAX_LEVEL;
-  }
+  currentLightLevel = constrain(newValue, 0, DIMMING_MAX_LEVEL);
 
   analogWrite(LED_PIN, (int)(currentLightLevel * 2.55));
 
-  return success;
+  return currentLightLevel == newValue;
 }
 
 /**
@@ -155,10 +145,12 @@ void touch(bool state) { // true = touch, false = no touch
 }
 
 void controllerValue(int16_t newValue) {
-  if (newValue != currentLightLevel) {
-    if (newValue > 0) {
+  int16_t constrainedValue = constrain(newValue, 0, DIMMING_MAX_LEVEL);
+
+  if (constrainedValue != currentLightLevel) {
+    if (constrainedValue > 0) {
       currentLightState = true;
-      desiredLightLevel = newValue;
+      desiredLightLevel = constrainedValue;
     } else {
       currentLightState = false;
     }
@@ -171,18 +163,20 @@ void controllerOnOff(bool newState) {
     if (newState && (currentLightLevel==0)) {
       //In the case that the Light State = On, but the dimmer value is zero,
       //then something (probably the controller) did something wrong,
-      //for the Dim value to 100%
-      controllerValue(50);
-    } else {
-      currentLightState = true;
+      //force the Dim value to 100%
+      desiredLightLevel = DIMMING_MAX_LEVEL;
     }
+    currentLightState = newState;
     SwitchSM(sdControllerValue);
   }
 }
 
-void InitSM(void(*sendCallback)(uint16_t, bool)) {
+void InitSM(void(*sendCallback)(int16_t, bool), int16_t initialValue) {
   _sendStateCallback = sendCallback;
-  SwitchSM(sdIdle);
+  currentLightLevel = 0;
+  desiredLightLevel = initialValue;
+  currentLightState = initialValue != 0;
+  SwitchSM(sdControllerValue);
 }
 
 void UpdateSM() {
