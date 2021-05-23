@@ -64,8 +64,7 @@ int16_t readFromEeprom() {
 
 void saveToEeprom(int16_t value) {
   int16_t oldValue = readFromEeprom();
-  // Only save, if the difference is larger than 5
-  // this is to save a bit on eeprom writes.
+
   if (oldValue != value) {
     Serial.print("saving to eeprom: ");
     Serial.println(value);
